@@ -4,7 +4,7 @@ import nltk
 from nltk.tokenize import word_tokenize
 import streamlit as st
 import base64
-nltk.download("punkt")
+nltk.download("punkt", quiet=True)
 from datetime import date,datetime
 # --------------------------------------------------
 # PAGE CONFIG
