@@ -4,7 +4,18 @@ import nltk
 from nltk.tokenize import word_tokenize
 import streamlit as st
 import base64
-nltk.download("punkt", quiet=True)
+import os
+import tempfile
+
+# Create a temporary folder for nltk data (Streamlit Cloud will keep it during runtime)
+nltk_data_dir = os.path.join(tempfile.gettempdir(), "nltk_data")
+os.makedirs(nltk_data_dir, exist_ok=True)
+
+# Set NLTK to use this folder
+nltk.data.path.append(nltk_data_dir)
+
+# Download punkt to that folder
+nltk.download("punkt", download_dir=nltk_data_dir, quiet=True)
 from datetime import date,datetime
 # --------------------------------------------------
 # PAGE CONFIG
