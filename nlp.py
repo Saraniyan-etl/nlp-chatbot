@@ -1,13 +1,10 @@
 import pandas as pd
 import re
 import nltk
+nltk.download("punkt", quiet=True)
 from nltk.tokenize import word_tokenize
 import streamlit as st
 import base64
-try:
-    nltk.data.find("tokenizers/punkt")
-except LookupError:
-    nltk.download("punkt", quiet=True)
 from datetime import date,datetime
 # --------------------------------------------------
 # PAGE CONFIG
