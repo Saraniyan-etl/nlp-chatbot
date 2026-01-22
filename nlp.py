@@ -306,7 +306,7 @@ if "processing" not in st.session_state:
 # --------------------------------------------------
 def csv_agent(user_input):
     text = user_input.lower()
-    tokens = word_tokenize(text)
+    tokens = re.findall(r'\b\w+\b', text.lower())
 
     if "show" in tokens and "all" in tokens:
         return df
