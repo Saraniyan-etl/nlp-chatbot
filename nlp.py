@@ -338,13 +338,11 @@ def csv_agent(user_input):
         if "today" in tokens:
             today = date.today()
             df_filtered = df_filtered[df_filtered["created_date"] == today]
-        for token in tokens:
-            try:
-                specific_date = datetime.strptime(token, "%d/%m/%Y").date()
+        else:
+            date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
+            if date_match:
+                specific_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
                 df_filtered = df_filtered[df_filtered["created_date"] == specific_date]
-                break
-            except ValueError:
-                continue
         #2nd condition null/not null
         if "not" in tokens and "null" in tokens:
             df_filtered = df_filtered[df_filtered["ams_id"].notna()]
