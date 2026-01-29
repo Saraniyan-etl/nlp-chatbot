@@ -305,7 +305,7 @@ if "processing" not in st.session_state:
 #  CHAT LOGIC 
 # --------------------------------------------------
 def csv_agent(user_input):
-    text = user_input.lower()
+    text = user_input.lower().replace("’", "").replace("'", "")
     tokens = re.findall(r'\b\w+\b', text.lower())
 
     if "show" in tokens and "all" in tokens:
