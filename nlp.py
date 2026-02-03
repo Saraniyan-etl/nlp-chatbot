@@ -402,17 +402,21 @@ def csv_agent(user_input):
             return df_today
 
     status_map = {
-            "pending review": {"awaiting_review"},
-            "pending": {"awaiting_review"},
-            "open": {"awaiting_review"},
-            "approved": {"applied"},
-            "rejected": {"rejected"},
-            "deleted": {"deleted"}
-        }
+    "pending review": {"awaiting_review"},
+    "pending": {"awaiting_review"},
+    "open": {"awaiting_review"},
+    "approved": {"applied"},
+    "rejected": {"rejected"},
+    "deleted": {"deleted"}
+ }
 
     matched = next((v for k, v in status_map.items() if k in text), None)
 
     if matched:
+       
+        if "df_filtered" not in locals():
+            df_filtered = df.copy()
+
         grouped = (
             df_filtered
             .groupby("source_dcr_header_id")["review_step_clean"]
@@ -424,12 +428,10 @@ def csv_agent(user_input):
                 return bool(steps & matched)
             return steps == matched
 
-        matching_ids = [
-            hid for hid, steps in grouped.items() if match_fn(steps)
-        ]
+        matching_ids = [hid for hid, steps in grouped.items() if match_fn(steps)]
+        df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]
 
-        df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]  
-       
+    
     if "how" in tokens and "many" in tokens:
         return df_filtered["source_dcr_header_id"].nunique()
     elif "show" in tokens:
