@@ -425,7 +425,10 @@ def csv_agent(user_input):
             return sum(match_fn(steps) for steps in grouped)
         else:  
             ids = [hid for hid, steps in grouped.items() if match_fn(steps)]
-            return df[df["source_dcr_header_id"].isin(ids)]
+            return (
+                df[df["source_dcr_header_id"].isin(ids)]
+                .drop_duplicates(subset=["source_dcr_header_id"])
+            )
 
     if "medium" in tokens:
         return df[df["priority_clean"] == "medium"]
