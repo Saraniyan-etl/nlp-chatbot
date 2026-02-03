@@ -401,34 +401,39 @@ def csv_agent(user_input):
         else:
             return df_today
 
-    grouped = df.groupby("source_dcr_header_id")["review_step_clean"].apply(set)
-
     status_map = {
-        "pending review": {"awaiting_review"},
-        "pending": {"awaiting_review"},
-        "open": {"awaiting_review"},
-        "approved": {"applied"},
-        "rejected": {"rejected"},
-        "deleted": {"deleted"}
-    }
+            "pending review": {"awaiting_review"},
+            "pending": {"awaiting_review"},
+            "open": {"awaiting_review"},
+            "approved": {"applied"},
+            "rejected": {"rejected"},
+            "deleted": {"deleted"}
+        }
 
     matched = next((v for k, v in status_map.items() if k in text), None)
 
     if matched:
+        grouped = (
+            df_filtered
+            .groupby("source_dcr_header_id")["review_step_clean"]
+            .apply(lambda x: set(s.lower().strip() for s in x))
+        )
+
         def match_fn(steps):
-            steps = set(s.lower() for s in steps)
             if matched & {"applied", "rejected", "deleted"}:
                 return bool(steps & matched)
-            else:
-                return steps == matched
-        if "how" in tokens and "many" in tokens:
-            return sum(match_fn(steps) for steps in grouped)
-        else:  
-            ids = [hid for hid, steps in grouped.items() if match_fn(steps)]
-            return (
-                df[df["source_dcr_header_id"].isin(ids)]
-                .drop_duplicates(subset=["source_dcr_header_id"])
-            )
+            return steps == matched
+
+        matching_ids = [
+            hid for hid, steps in grouped.items() if match_fn(steps)
+        ]
+
+        df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]  
+       
+    if "how" in tokens and "many" in tokens:
+        return df_filtered["source_dcr_header_id"].nunique()
+    elif "show" in tokens:
+        return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
 
     if "medium" in tokens:
         return df[df["priority_clean"] == "medium"]
