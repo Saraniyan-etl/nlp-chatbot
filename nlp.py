@@ -305,6 +305,7 @@ if "processing" not in st.session_state:
 #  CHAT LOGIC 
 # --------------------------------------------------
 def csv_agent(user_input):
+   
     text = user_input.lower()
     text=re.sub(r'[^a-z0-9\s/]', '', text)
     tokens = re.findall(r'\b\w+\b', text.lower())
@@ -324,7 +325,84 @@ def csv_agent(user_input):
 
         if "dcr" in tokens:
             return df["mdm_dcr_id"].nunique()
+    if "assigned" in tokens and "to" in tokens and "on" in tokens:
+        try:
+          person = tokens[tokens.index("to") + 1]
+        except IndexError:
+          return "Please specify a person."
+        df_filtered = df[df["dcr_assigned_to_clean"].str.contains(person, case=False, na=False)]
+        # ---- Handle explicit date (dd/mm/yyyy) ----
+        specific_date = None
+        date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
+        if date_match:
+            specific_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
+            print("DEBUG: Applying SPECIFIC DATE filter =", specific_date)
 
+            df_filtered = df_filtered[df_filtered["created_date"] == specific_date]
+            print("DEBUG: df_filtered after SPECIFIC DATE filter row count =", len(df_filtered))
+            print(df_filtered.head(5))
+
+        if not ("today" in tokens or "current" in tokens or "latest" in tokens or specific_date):
+            print("DEBUG: Assigned mentioned but NO date filter applied")
+
+
+        # -------------------------------------------------
+        # STATUS FILTER
+        # -------------------------------------------------
+        print("DEBUG: Entering status filter block")
+
+        status_map = {
+            "pending review": {"awaiting_review"},
+            "pending": {"awaiting_review"},
+            "open": {"awaiting_review"},
+            "approved": {"applied"},
+            "rejected": {"rejected"},
+            "deleted": {"deleted"}
+        }
+
+        matched = next((v for k, v in status_map.items() if k in text), None)
+        print("DEBUG: Matched status =", matched)
+
+        if matched:
+            print("DEBUG: Applying status filter")
+
+            print("DEBUG: df_filtered BEFORE status filter row count =", len(df_filtered))
+            print(df_filtered.head(5))
+
+            grouped = (
+                df_filtered
+                .groupby("source_dcr_header_id")["review_step_clean"]
+                .apply(lambda x: set(s.lower().strip() for s in x))
+            )
+            print("DEBUG: Grouped review steps sample =", grouped.head())
+            def match_fn(steps):
+                if matched & {"applied", "rejected", "deleted"}:
+                    return bool(steps & matched)
+                return steps == matched
+
+            matching_ids = [hid for hid, steps in grouped.items() if match_fn(steps)]
+            print("DEBUG: matching source_dcr_header_id count =", len(matching_ids))
+            print("DEBUG: matching IDs sample =", matching_ids[:5])
+
+            df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]
+
+            print("DEBUG: df_filtered AFTER status filter row count =", len(df_filtered))
+            print(df_filtered.head(5))
+
+
+            # -------------------------------------------------
+            # FINAL RETURN
+            # -------------------------------------------------
+            print("DEBUG: Final df_filtered row count =", len(df_filtered))
+            print(df_filtered.head(5))
+
+            if "how" in tokens and "many" in tokens:
+                print("DEBUG: Returning final COUNT")
+                return df_filtered["source_dcr_header_id"].nunique()
+
+            elif "show" in tokens:
+                print("DEBUG: Returning final DATAFRAME")
+                return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
     if "assigned" in tokens and "to" in tokens:
         
         try:
