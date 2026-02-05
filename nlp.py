@@ -329,14 +329,9 @@ def csv_agent(user_input):
 
 
     if "assigned" in tokens and "to" in tokens and "on" in tokens:
-        # -------------------------------
-        # PARSE PERSON
-        # -------------------------------
+
         person = tokens[tokens.index("to") + 1]
 
-        # -------------------------------
-        # PARSE DATE
-        # -------------------------------
         date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
         if not date_match:
             return "Please specify a date."
@@ -345,9 +340,7 @@ def csv_agent(user_input):
         print(f"DEBUG: Person = {person}")
         print(f"DEBUG: Date = {as_of_date}")
 
-        # -------------------------------
-        # STEP 1: ALL DCRs EVER assigned to person
-        # -------------------------------
+        # DCRs ever assigned to this person
         dcrs_assigned_to_person = df[
             df["dcr_assigned_to"].str.contains(person, case=False, na=False)
         ]["source_dcr_header_id"].unique()
@@ -357,9 +350,7 @@ def csv_agent(user_input):
             f"{list(dcrs_assigned_to_person)} total: {len(dcrs_assigned_to_person)}"
         )
 
-        # -------------------------------
-        # STEP 2: ALL rows up to the given date
-        # -------------------------------
+        # Filter df up to the specified date
         df_on_date = df[df["created_date"] <= as_of_date].copy()
 
         # Only DCRs ever assigned to person
@@ -368,19 +359,17 @@ def csv_agent(user_input):
         df_date["review_step_norm"] = df_date["review_step"].str.lower().str.strip()
         print(f"DEBUG: Rows after date filter = {len(df_date)}")
 
-        # -------------------------------
-        # STEP 3: FINAL STATUS PER DCR
-        # -------------------------------
+        # Group review steps per DCR
         grouped = (
-            df_on_date[df_on_date["source_dcr_header_id"].isin(dcrs_assigned_to_person)]
-            .groupby("source_dcr_header_id")["review_step"]
-            .apply(lambda x: set(x.str.lower().str.strip()))
+            df_date.groupby("source_dcr_header_id")["review_step_norm"]
+            .apply(lambda x: set(x))
         )
 
         print("DEBUG: DCR → review steps")
         for k, v in grouped.items():
             print(f"  {k} = {v}")
 
+        # Determine final status per DCR
         def final_status(steps):
             if "applied" in steps:
                 return "applied"
@@ -394,22 +383,22 @@ def csv_agent(user_input):
         print("DEBUG: DCR → final_status")
         print(final_status_map)
 
-        # -------------------------------
-        # STEP 4: MATCH QUERY STATUS
-        # -------------------------------
+        # Status mapping
         status_map = {
-        "pending review": {"awaiting_review"},
-        "pending": {"awaiting_review"},
-        "open": {"awaiting_review"},
-        "approved": {"applied"},
-        "rejected": {"rejected"},
-        "deleted": {"deleted"}
-         }
+            "pending review": "pending",
+            "pending": "pending",
+            "open": "pending",
+            "approved": "applied",
+            "rejected": "rejected",
+            "deleted": "deleted"
+        }
 
+        # Determine which status the user asked for
         query_status = next((v for k, v in status_map.items() if k in text), None)
         if not query_status:
             return "Status not recognized."
 
+        # Filter DCRs matching the final status
         matching_dcrs = final_status_map[final_status_map == query_status].index.tolist()
 
         print(
@@ -424,6 +413,7 @@ def csv_agent(user_input):
             return len(matching_dcrs)
         elif "show" in tokens:
             return df_date[df_date["source_dcr_header_id"].isin(matching_dcrs)]
+
 
 
 
