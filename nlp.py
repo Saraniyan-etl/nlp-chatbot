@@ -398,11 +398,13 @@ def csv_agent(user_input):
         # STEP 4: MATCH QUERY STATUS
         # -------------------------------
         status_map = {
-            "approved": "applied",
-            "rejected": "rejected",
-            "deleted": "deleted",
-            "pending": "pending"
-        }
+        "pending review": {"awaiting_review"},
+        "pending": {"awaiting_review"},
+        "open": {"awaiting_review"},
+        "approved": {"applied"},
+        "rejected": {"rejected"},
+        "deleted": {"deleted"}
+         }
 
         query_status = next((v for k, v in status_map.items() if k in text), None)
         if not query_status:
