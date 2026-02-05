@@ -292,6 +292,7 @@ df["dcr_assigned_to_clean"] = df["dcr_assigned_to"].astype(str).str.replace(r'\s
 df["created_date"] = pd.to_datetime(df["created_date"], errors="coerce").dt.date
 
 
+
 # --------------------------------------------------
 # SESSION STATE
 # --------------------------------------------------
@@ -325,143 +326,105 @@ def csv_agent(user_input):
 
         if "dcr" in tokens:
             return df["mdm_dcr_id"].nunique()
+
+
     if "assigned" in tokens and "to" in tokens and "on" in tokens:
-        try:
-          person = tokens[tokens.index("to") + 1]
-        except IndexError:
-          return "Please specify a person."
-        df_filtered = df[df["dcr_assigned_to_clean"].str.contains(person, case=False, na=False)]
-        # ---- Handle explicit date (dd/mm/yyyy) ----
-        specific_date = None
+        # -------------------------------
+        # PARSE PERSON
+        # -------------------------------
+        person = tokens[tokens.index("to") + 1]
+
+        # -------------------------------
+        # PARSE DATE
+        # -------------------------------
         date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
-        if date_match:
-            specific_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
-            print("DEBUG: Applying SPECIFIC DATE filter =", specific_date)
+        if not date_match:
+            return "Please specify a date."
 
-            df_filtered = df_filtered[df_filtered["created_date"] == specific_date]
-            print("DEBUG: df_filtered after SPECIFIC DATE filter row count =", len(df_filtered))
-            print(df_filtered.head(5))
+        as_of_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
+        print(f"DEBUG: Person = {person}")
+        print(f"DEBUG: Date = {as_of_date}")
 
-        if not ("today" in tokens or "current" in tokens or "latest" in tokens or specific_date):
-            print("DEBUG: Assigned mentioned but NO date filter applied")
+        # -------------------------------
+        # STEP 1: ALL DCRs EVER assigned to person
+        # -------------------------------
+        dcrs_assigned_to_person = df[
+            df["dcr_assigned_to"].str.contains(person, case=False, na=False)
+        ]["source_dcr_header_id"].unique()
 
+        print(
+            f"DEBUG: DCRs EVER assigned to '{person}' = "
+            f"{list(dcrs_assigned_to_person)} total: {len(dcrs_assigned_to_person)}"
+        )
 
-        # -------------------------------------------------
-        # STATUS FILTER
-        # -------------------------------------------------
-        print("DEBUG: Entering status filter block")
+        # -------------------------------
+        # STEP 2: ALL rows up to the given date
+        # -------------------------------
+        df_on_date = df[df["created_date"] <= as_of_date].copy()
 
+        # Only DCRs ever assigned to person
+        df_date = df_on_date[df_on_date["source_dcr_header_id"].isin(dcrs_assigned_to_person)].copy()
+
+        df_date["review_step_norm"] = df_date["review_step"].str.lower().str.strip()
+        print(f"DEBUG: Rows after date filter = {len(df_date)}")
+
+        # -------------------------------
+        # STEP 3: FINAL STATUS PER DCR
+        # -------------------------------
+        grouped = (
+            df_on_date[df_on_date["source_dcr_header_id"].isin(dcrs_assigned_to_person)]
+            .groupby("source_dcr_header_id")["review_step"]
+            .apply(lambda x: set(x.str.lower().str.strip()))
+        )
+
+        print("DEBUG: DCR → review steps")
+        for k, v in grouped.items():
+            print(f"  {k} = {v}")
+
+        def final_status(steps):
+            if "applied" in steps:
+                return "applied"
+            if "rejected" in steps:
+                return "rejected"
+            if "deleted" in steps:
+                return "deleted"
+            return "pending"
+
+        final_status_map = grouped.apply(final_status)
+        print("DEBUG: DCR → final_status")
+        print(final_status_map)
+
+        # -------------------------------
+        # STEP 4: MATCH QUERY STATUS
+        # -------------------------------
         status_map = {
-            "pending review": {"awaiting_review"},
-            "pending": {"awaiting_review"},
-            "open": {"awaiting_review"},
-            "approved": {"applied"},
-            "rejected": {"rejected"},
-            "deleted": {"deleted"}
+            "approved": "applied",
+            "rejected": "rejected",
+            "deleted": "deleted",
+            "pending": "pending"
         }
 
-        matched = next((v for k, v in status_map.items() if k in text), None)
-        print("DEBUG: Matched status =", matched)
+        query_status = next((v for k, v in status_map.items() if k in text), None)
+        if not query_status:
+            return "Status not recognized."
 
-        if matched:
-            print("DEBUG: Applying status filter")
+        matching_dcrs = final_status_map[final_status_map == query_status].index.tolist()
 
-            print("DEBUG: df_filtered BEFORE status filter row count =", len(df_filtered))
-            print(df_filtered.head(5))
+        print(
+            f"DEBUG: Matching DCRs for status '{query_status}' = "
+            f"{matching_dcrs} total: {len(matching_dcrs)}"
+        )
 
-            grouped = (
-                df_filtered
-                .groupby("source_dcr_header_id")["review_step_clean"]
-                .apply(lambda x: set(s.lower().strip() for s in x))
-            )
-            print("DEBUG: Grouped review steps sample =", grouped.head())
-            def match_fn(steps):
-                if matched & {"applied", "rejected", "deleted"}:
-                    return bool(steps & matched)
-                return steps == matched
-
-            matching_ids = [hid for hid, steps in grouped.items() if match_fn(steps)]
-            print("DEBUG: matching source_dcr_header_id count =", len(matching_ids))
-            print("DEBUG: matching IDs sample =", matching_ids[:5])
-
-            df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]
-
-            print("DEBUG: df_filtered AFTER status filter row count =", len(df_filtered))
-            print(df_filtered.head(5))
-
-
-            # -------------------------------------------------
-            # FINAL RETURN
-            # -------------------------------------------------
-            print("DEBUG: Final df_filtered row count =", len(df_filtered))
-            print(df_filtered.head(5))
-
-            if "how" in tokens and "many" in tokens:
-                print("DEBUG: Returning final COUNT")
-                return df_filtered["source_dcr_header_id"].nunique()
-
-            elif "show" in tokens:
-                print("DEBUG: Returning final DATAFRAME")
-                return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
-    if "assigned" in tokens and "to" in tokens:
-        
-        try:
-            person = tokens[tokens.index("to") + 1]
-        except IndexError:
-            return "Please specify a person."
-
-        
-        df_filtered = df[df["dcr_assigned_to_clean"].str.contains(person, case=False, na=False)]
-
-        # current
-        if "today" in tokens:
-            today = date.today()
-            df_filtered = df_filtered[df_filtered["created_date"] == today]
-        else:
-            date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
-            if date_match:
-                specific_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
-                df_filtered = df_filtered[df_filtered["created_date"] == specific_date]
-        #2nd condition null/not null
-        if "not" in tokens and "null" in tokens:
-            df_filtered = df_filtered[df_filtered["ams_id"].notna()]
-        elif "null" in tokens:
-            df_filtered = df_filtered[df_filtered["ams_id"].isna()]
-        #3rd condition status
-        
-        status_map = {
-            "pending review": {"awaiting_review"},
-            "pending": {"awaiting_review"},
-            "open": {"awaiting_review"},
-            "approved": {"applied"},
-            "rejected": {"rejected"},
-            "deleted": {"deleted"}
-        }
-
-        matched = next((v for k, v in status_map.items() if k in text), None)
-
-        if matched:
-            grouped = (
-                df_filtered
-                .groupby("source_dcr_header_id")["review_step_clean"]
-                .apply(lambda x: set(s.lower().strip() for s in x))
-            )
-
-            def match_fn(steps):
-                if matched & {"applied", "rejected", "deleted"}:
-                    return bool(steps & matched)
-                return steps == matched
-
-            matching_ids = [
-                hid for hid, steps in grouped.items() if match_fn(steps)
-            ]
-
-            df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]  
-       
+        # -------------------------------
+        # FINAL RETURN
+        # -------------------------------
         if "how" in tokens and "many" in tokens:
-            return df_filtered["source_dcr_header_id"].nunique()
+            return len(matching_dcrs)
         elif "show" in tokens:
-            return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
+            return df_date[df_date["source_dcr_header_id"].isin(matching_dcrs)]
+
+
+
     print("DEBUG: tokens =", tokens)
 
 # -------------------------------------------------
