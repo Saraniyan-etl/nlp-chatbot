@@ -310,11 +310,37 @@ def csv_agent(user_input):
     text = user_input.lower()
     text=re.sub(r'[^a-z0-9\s/]', '', text)
     tokens = re.findall(r'\b\w+\b', text.lower())
+    count_keywords = {
+        "how many",
+        "count",
+        "give count",
+        "total",
+        "total number",
+        "number of",
+        "provide count",
+        "what is the count",
+        "how much"
+    }
 
+    show_keywords = {
+        "show",
+        "display",
+        "list",
+        "give",
+        "provide",
+        "fetch",
+        "get",
+        "view",
+        "see"
+    }
+
+    is_count_query = any(phrase in text for phrase in count_keywords)
+    is_show_query = any(word in tokens for word in show_keywords)
     if "show" in tokens and "all" in tokens:
         return df
 
-    if "how" in tokens and "many" in tokens:
+    if is_count_query:
+
         if "medium" in tokens:
             return len(df[df["priority_clean"] == "medium"])
         
@@ -409,15 +435,74 @@ def csv_agent(user_input):
         # -------------------------------
         # FINAL RETURN
         # -------------------------------
-        if "how" in tokens and "many" in tokens:
+        if is_count_query:
             return len(matching_dcrs)
-        elif "show" in tokens:
+        elif is_show_query:
             return df_date[df_date["source_dcr_header_id"].isin(matching_dcrs)]
 
 
 
 
     print("DEBUG: tokens =", tokens)
+    if "assigned" in tokens and "to" in tokens:
+        
+        try:
+            person = tokens[tokens.index("to") + 1]
+        except IndexError:
+            return "Please specify a person."
+
+        
+        df_filtered = df[df["dcr_assigned_to_clean"].str.contains(person, case=False, na=False)]
+
+        # current
+        if "today" in tokens:
+            today = date.today()
+            df_filtered = df_filtered[df_filtered["created_date"] == today]
+        else:
+            date_match = re.search(r"\b\d{2}/\d{2}/\d{4}\b", text)
+            if date_match:
+                specific_date = datetime.strptime(date_match.group(), "%d/%m/%Y").date()
+                df_filtered = df_filtered[df_filtered["created_date"] == specific_date]
+        #2nd condition null/not null
+        if "not" in tokens and "null" in tokens:
+            df_filtered = df_filtered[df_filtered["ams_id"].notna()]
+        elif "null" in tokens:
+            df_filtered = df_filtered[df_filtered["ams_id"].isna()]
+        #3rd condition status
+        
+        status_map = {
+            "pending review": {"awaiting_review"},
+            "pending": {"awaiting_review"},
+            "open": {"awaiting_review"},
+            "approved": {"applied"},
+            "rejected": {"rejected"},
+            "deleted": {"deleted"}
+        }
+
+        matched = next((v for k, v in status_map.items() if k in text), None)
+
+        if matched:
+            grouped = (
+                df_filtered
+                .groupby("source_dcr_header_id")["review_step_clean"]
+                .apply(lambda x: set(s.lower().strip() for s in x))
+            )
+
+            def match_fn(steps):
+                if matched & {"applied", "rejected", "deleted"}:
+                    return bool(steps & matched)
+                return steps == matched
+
+            matching_ids = [
+                hid for hid, steps in grouped.items() if match_fn(steps)
+            ]
+
+            df_filtered = df_filtered[df_filtered["source_dcr_header_id"].isin(matching_ids)]  
+       
+        if is_count_query:
+            return df_filtered["source_dcr_header_id"].nunique()
+        elif is_show_query:
+            return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
 
 # -------------------------------------------------
 # ASSIGNED + DATE (today / current / latest / explicit date)
@@ -501,11 +586,11 @@ def csv_agent(user_input):
     print("DEBUG: Final df_filtered row count =", len(df_filtered))
     print(df_filtered.head(5))
 
-    if "how" in tokens and "many" in tokens:
+    if is_count_query:
         print("DEBUG: Returning final COUNT")
         return df_filtered["source_dcr_header_id"].nunique()
 
-    elif "show" in tokens:
+    elif is_show_query:
         print("DEBUG: Returning final DATAFRAME")
         return df_filtered.drop_duplicates(subset=["source_dcr_header_id"])
 
@@ -544,7 +629,7 @@ def csv_agent(user_input):
             df_month = df_month[pd.to_datetime(df_month["created_date"]).dt.year == int(year_str)]
 
             
-            if "how" in tokens and "many" in tokens:
+            if is_count_query:
                 return len(df_month)
             else:
                 return df_month  
@@ -553,7 +638,7 @@ def csv_agent(user_input):
     if year_match:
         year = year_match.group()
         df_year = df[pd.to_datetime(df["created_date"]).dt.year == int(year)]
-        if "how" in tokens and "many" in tokens:
+        if is_count_query:
             return len(df_year)
         else:
             return df_year
