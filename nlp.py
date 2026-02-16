@@ -333,7 +333,14 @@ def csv_agent(user_input):
         "view",
         "see"
     }
-
+    assign_keywords = {
+    "assigned",
+    "assign",
+    "allocated",
+    "allotted",
+    "mapped"
+    }
+    is_assign_query = any(word in tokens for word in assign_keywords)
     is_count_query = any(phrase in text for phrase in count_keywords)
     is_show_query = any(word in tokens for word in show_keywords)
     if "show" in tokens and "all" in tokens:
@@ -350,11 +357,11 @@ def csv_agent(user_input):
         if "hco" in tokens:
             return len(df[df["child_entity_type_clean"] == "hco"])
 
-        if "dcr" in tokens:
+        if "dcr" in tokens or "dcrs" in tokens:
             return df["mdm_dcr_id"].nunique()
 
 
-    if "assigned" in tokens and "to" in tokens and "on" in tokens:
+    if is_assign_query  and "to" in tokens and "on" in tokens:
 
         person = tokens[tokens.index("to") + 1]
 
@@ -366,7 +373,6 @@ def csv_agent(user_input):
         print(f"DEBUG: Person = {person}")
         print(f"DEBUG: Date = {as_of_date}")
 
-        # DCRs ever assigned to this person
         dcrs_assigned_to_person = df[
             df["dcr_assigned_to"].str.contains(person, case=False, na=False)
         ]["source_dcr_header_id"].unique()
@@ -507,7 +513,7 @@ def csv_agent(user_input):
 # -------------------------------------------------
 # ASSIGNED + DATE (today / current / latest / explicit date)
 # -------------------------------------------------
-    if "assigned" in tokens or "created" in tokens :
+    if is_assign_query or "created" in tokens :
         print("DEBUG: Entered ASSIGNED block")
         df_filtered = df.copy()
         print("DEBUG: Initial df_filtered row count =", len(df_filtered))
