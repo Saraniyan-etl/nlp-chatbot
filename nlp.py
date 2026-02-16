@@ -357,7 +357,7 @@ def csv_agent(user_input):
         if "hco" in tokens:
             return len(df[df["child_entity_type_clean"] == "hco"])
 
-        if "dcr" in tokens or "dcrs" in tokens:
+        if "dcr" in tokens:
             return df["mdm_dcr_id"].nunique()
 
 
@@ -450,7 +450,7 @@ def csv_agent(user_input):
 
 
     print("DEBUG: tokens =", tokens)
-    if "assigned" in tokens and "to" in tokens:
+    if is_assign_query in tokens and "to" in tokens:
         
         try:
             person = tokens[tokens.index("to") + 1]
@@ -459,7 +459,7 @@ def csv_agent(user_input):
 
         
         df_filtered = df[df["dcr_assigned_to_clean"].str.contains(person, case=False, na=False)]
-
+        print("",df_filtered)
         # current
         if "today" in tokens:
             today = date.today()
